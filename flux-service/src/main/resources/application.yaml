@@ -1,17 +1,5 @@
 spring:
   application:
     name: flux-service
-  web-flux:
-    base-path: /flux-service
-
-server:
-    port: 9002
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8000/eureka/
-  instance:
-    hostname: localhost
-    lease-renewal-interval-in-seconds: 5
-    lease-expiration-duration-in-seconds: 10
+  config:
+    import: configserver:http://localhost:8001
