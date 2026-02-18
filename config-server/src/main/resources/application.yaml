@@ -1,0 +1,22 @@
+server:
+  port: 8001
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+            search-locations: classpath:/config
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8000/eureka/
+  instance:
+    hostname: localhost
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
