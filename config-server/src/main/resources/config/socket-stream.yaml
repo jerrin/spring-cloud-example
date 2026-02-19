@@ -1,0 +1,39 @@
+spring:
+  kafka:
+    bootstrap-servers: localhost:7007
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: ${kafka.stream.consumer.group-id}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+  graphql:
+    graphiql:
+      enabled: true
+    websocket:
+      path: "/graphql"
+
+server:
+  port: 7000
+
+kafka:
+  stream:
+    topic:
+      name: stream-topic
+    consumer:
+      group-id: stream-group
+      reactive-group-id: reactive-stream-group
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8000/eureka/
+  instance:
+    hostname: localhost
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10

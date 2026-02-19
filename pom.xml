@@ -21,10 +21,12 @@
     </properties>
 
     <modules>
+        <module>config-server</module>
         <module>eureka-server</module>
         <module>gateway</module>
         <module>mvc-service</module>
         <module>flux-service</module>
+        <module>socket-stream</module>
     </modules>
 
     <dependencies>
