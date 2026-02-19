@@ -28,12 +28,3 @@ kafka:
     consumer:
       group-id: stream-group
       reactive-group-id: reactive-stream-group
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8000/eureka/
-  instance:
-    hostname: localhost
-    lease-renewal-interval-in-seconds: 5
-    lease-expiration-duration-in-seconds: 10

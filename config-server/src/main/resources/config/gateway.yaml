@@ -15,12 +15,3 @@ spring:
               uri: lb://flux-service
               predicates:
                 - Path=/flux-service/*
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8000/eureka/
-  instance:
-    hostname: localhost
-    lease-renewal-interval-in-seconds: 5
-    lease-expiration-duration-in-seconds: 10
