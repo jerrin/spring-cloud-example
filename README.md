@@ -11,6 +11,7 @@ spring-cloud-example/
 ├── gateway/                # API Gateway (Cloud Gateway)
 ├── mvc-service/            # Traditional Spring MVC Service
 ├── flux-service/           # Reactive WebFlux Service
+├── socket-stream/          # GraphQL Real-time Streaming Service with Kafka
 └── pom.xml                 # Parent POM (Multi-module Maven project)
 ```
 
@@ -24,20 +25,21 @@ spring-cloud-example/
                              ▲
                              │ (pulls config)
                              │
-    ┌────────────────────────┼────────────────────────┐
-    │                        │                        │
-┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│   Gateway       │  │  MVC Service     │  │  Flux Service    │
-│  (Port 9000)    │  │   (Port 9001)    │  │   (Port 9002)    │
-└─────────────────┘  └──────────────────┘  └──────────────────┘
-    │                        │                        │
-    └────────────────────────┼────────────────────────┘
-                             │ (registers/discovers)
-                             ▼
-                    ┌──────────────────┐
-                    │  Eureka Server   │
-                    │   (Port 8000)    │
-                    └──────────────────┘
+    ┌────────────────────────┼────────────────────────────────┐
+    │                        │                                │
+┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│   Gateway       │  │  MVC Service     │  │  Flux Service    │  │ Socket Stream    │
+│  (Port 9000)    │  │   (Port 9001)    │  │   (Port 9002)    │  │ GraphQL (7000)   │
+└─────────────────┘  └──────────────────┘  └──────────────────┘  └──────────────────┘
+    │                        │                        │                     │
+    └────────────────────────┼────────────────────────┼─────────────────────┘
+                             │ (registers/discovers) │
+                             │                       │ (Kafka messages)
+                             ▼                       ▼
+                    ┌──────────────────┐    ┌──────────────────┐
+                    │  Eureka Server   │    │  Kafka Broker    │
+                    │   (Port 8000)    │    │   (Port 7007)    │
+                    └──────────────────┘    └──────────────────┘
 ```
 
 ## Services
@@ -51,13 +53,6 @@ The central service registry where all microservices register themselves and dis
 - Service registration and discovery
 - Health check monitoring
 - Load balancing support
-
-**Configuration:** `eureka-server/src/main/resources/application.yaml`
-```yaml
-server.port: 8000
-eureka.client.register-with-eureka: false
-eureka.client.fetch-registry: false
-```
 
 **Endpoints:**
 | Endpoint | Description |
@@ -78,17 +73,12 @@ Centralized configuration management for all microservices. Configurations are s
 - Dynamic configuration refresh
 - Native profile for local file-based configuration
 
-**Configuration:** `config-server/src/main/resources/application.yaml`
-```yaml
-server.port: 8001
-spring.profiles.active: native
-spring.cloud.config.server.native.search-locations: classpath:/config
-```
-
 **Configuration Files:**
-- `config/gateway.yaml` - Gateway configuration
-- `config/mvc-service.yaml` - MVC Service configuration
-- `config/flux-service.yaml` - Flux Service configuration
+- `config/application.yaml` - Common properties for all services (Eureka, health checks)
+- `config/gateway.yaml` - Gateway route definitions and settings
+- `config/mvc-service.yaml` - MVC Service port and context configuration
+- `config/flux-service.yaml` - Flux Service port and base path configuration
+- `config/socket-stream.yaml` - Socket Stream Kafka and GraphQL configuration
 
 **Endpoints:**
 | Endpoint | Description |
@@ -96,15 +86,13 @@ spring.cloud.config.server.native.search-locations: classpath:/config
 | `http://localhost:8001/gateway/default` | Get gateway configuration |
 | `http://localhost:8001/mvc-service/default` | Get MVC service configuration |
 | `http://localhost:8001/flux-service/default` | Get Flux service configuration |
+| `http://localhost:8001/socket-stream/default` | Get Socket Stream configuration |
 
 **How Config Server Works:**
-1. Each microservice declares its application name in `application.yaml`
-2. On startup, services import config from the Config Server:
-   ```yaml
-   spring.config.import: configserver:http://localhost:8001
-   ```
-3. The Config Server looks for files matching the pattern: `{application-name}.yaml`
-4. Configurations are loaded and applied to the service before it fully starts
+1. Each microservice declares its application name and imports configuration from Config Server during startup
+2. The Config Server looks for files matching the pattern: `{application-name}.yaml`
+3. Configurations are loaded and applied to the service before the application context fully initializes
+4. Common properties from `application.yaml` are inherited by all services
 
 ---
 
@@ -118,25 +106,18 @@ Central entry point for all client requests. Routes traffic to backend services 
 - Load balancing via Eureka
 - Filter support (authentication, logging, etc.)
 
-**Configuration:** `config/gateway.yaml`
-```yaml
-server.port: 9000
-spring.cloud.gateway.routes:
-  - id: mvc-service
-    uri: lb://mvc-service
-    predicates:
-      - Path=/mvc-service/**
-  - id: flux-service
-    uri: lb://flux-service
-    predicates:
-      - Path=/flux-service/**
-```
+**Routing Configuration:**
+The gateway routes requests to backend services using service names (discovered via Eureka):
+- `/mvc-service/**` routes to MVC Service
+- `/flux-service/**` routes to Flux Service
+- `/socket-stream/**` routes to Socket Stream Service
 
 **Endpoints (Gateway Routes):**
 | Endpoint | Target Service | Description |
 |----------|----------------|-------------|
 | `http://localhost:9000/mvc-service/get` | MVC Service | Get MVC service message |
 | `http://localhost:9000/flux-service/users` | Flux Service | Get user stream (Server-Sent Events) |
+| `http://localhost:9000/socket-stream/graphiql` | Socket Stream | GraphQL IDE |
 
 ---
 
@@ -144,12 +125,6 @@ spring.cloud.gateway.routes:
 **Port:** 9001
 
 A traditional Spring MVC microservice demonstrating conventional request-response patterns.
-
-**Configuration:** `config/mvc-service.yaml`
-```yaml
-server.port: 9001
-server.servlet.context-path: /mvc-service
-```
 
 **Local Access Endpoints:**
 | Endpoint | Method | Description | Response |
@@ -161,29 +136,12 @@ server.servlet.context-path: /mvc-service
 |----------|--------|-------------|
 | `http://localhost:9000/mvc-service/get` | GET | Get message (routed through gateway) |
 
-**Key Code:**
-```java
-@RestController
-public class MvcService {
-    @GetMapping("/get")
-    public String getMessage() {
-        return "Hello from MVC Service!";
-    }
-}
-```
-
 ---
 
 ### 5. **Flux Service** (Reactive WebFlux)
 **Port:** 9002
 
 A reactive microservice using Spring WebFlux for handling asynchronous, non-blocking requests with Reactor Flux.
-
-**Configuration:** `config/flux-service.yaml`
-```yaml
-server.port: 9002
-spring.web-flux.base-path: /flux-service
-```
 
 **Local Access Endpoints:**
 | Endpoint | Method | Description | Response |
@@ -196,15 +154,131 @@ spring.web-flux.base-path: /flux-service
 | `http://localhost:9000/flux-service/users` | GET | Stream users (routed through gateway) |
 
 **Response Format (Server-Sent Events):**
-```
-event: 
-data: {"id":"1","name":"User 1"}
+One user per second in JSON format until 10 users are streamed.
 
-event: 
-data: {"id":"2","name":"User 2"}
+---
 
-... (continues every 1 second until 10 users)
+### 6. **Socket Stream Service** (GraphQL Real-time Streaming)
+**Port:** 7000
+
+A real-time message streaming service that combines GraphQL subscriptions with Kafka messaging. This service demonstrates event-driven communication patterns using WebSocket connections for live data updates.
+
+**Features:**
+- GraphQL API for queries, mutations, and subscriptions
+- Real-time message streaming via WebSocket
+- Kafka integration for message persistence and distribution
+- Interactive GraphiQL UI for testing
+- Automatic topic creation and consumer group management
+
+**Key Endpoints:**
+| Endpoint | Type | Purpose |
+|----------|------|---------|
+| `http://localhost:7000/graphiql` | HTTP GET | Interactive GraphQL IDE |
+| `http://localhost:7000/graphql` | HTTP POST | GraphQL mutations and queries |
+| `ws://localhost:7000/graphql` | WebSocket | GraphQL subscriptions (real-time) |
+
+**Configuration:** `config/socket-stream.yaml`
+- Server port: 7000
+- Kafka broker: localhost:7007
+- Kafka topic: stream-topic
+- Consumer group: stream-group
+- GraphQL WebSocket enabled
+
+**How to Run Kafka (Required for Socket Stream):**
+
+Socket Stream requires Kafka and Kafka UI containers running. Use docker-compose to start them from the socket-stream directory:
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| Navigate to socket-stream | `cd socket-stream` | Move to service directory |
+| Start Kafka and UI | `docker-compose up -d` | Launch Kafka broker and management UI |
+| View Kafka UI | Open `http://localhost:8080` | Monitor topics and messages |
+| Stop services | `docker-compose down` | Stop containers |
+| Stop and clean data | `docker-compose down -v` | Stop containers and remove volumes |
+
+**Testing GraphQL Mutations and Subscriptions:**
+
+The Socket Stream service exposes two main GraphQL operations:
+
+**1. Mutation - sendMessage**
+
+Purpose: Send a message to the stream, which will be published to Kafka and distributed to all subscribers.
+
+How to test:
+- Open GraphiQL at http://localhost:7000/graphiql in a browser window
+- Paste the mutation query in the editor
+- Click the Play button to execute
+
+Query structure:
 ```
+mutation {
+  sendMessage(input: { content: "Hello from GraphQL" }) {
+    id
+    content
+  }
+}
+```
+
+Expected response: Returns the message ID and content that was published.
+
+**2. Subscription - messageStream**
+
+Purpose: Subscribe to receive messages in real-time as they are published to Kafka.
+
+How to test:
+- Open GraphiQL at http://localhost:7000/graphiql in a **different browser window or tab**
+- Paste the subscription query in the editor
+- Click the Play button to activate the subscription
+- The subscription will wait for messages and display them as they arrive
+
+Query structure:
+```
+subscription {
+  messageStream {
+    id
+    content
+  }
+}
+```
+
+Expected behavior: Messages will stream in real-time, arriving one per second. Keep this window open while sending mutations from another window.
+
+**Complete Testing Workflow:**
+
+1. Start Kafka and Kafka UI from socket-stream directory:
+   ```
+   cd socket-stream
+   docker-compose up -d
+   ```
+
+2. Start Socket Stream service (mvn spring-boot:run from socket-stream directory)
+
+3. Open two browser windows/tabs:
+   - Window A: http://localhost:7000/graphiql
+   - Window B: http://localhost:7000/graphiql
+
+4. In Window B (subscription listener):
+   - Paste the messageStream subscription query
+   - Click Play to activate listening
+   - Keep this window open
+
+5. In Window A (mutation sender):
+   - Paste the sendMessage mutation query
+   - Click Play to send the message
+   - Watch Window B receive the message in real-time
+
+6. You can send multiple mutations from Window A while subscription is active in Window B
+
+**Architecture Details:**
+
+The service uses:
+- **GraphQL Controller**: Handles mutation and subscription requests
+- **Kafka Producer**: Publishes messages to Kafka topic
+- **Kafka Consumer**: Consumes messages from Kafka topic
+- **Reactive Stream**: Uses Project Reactor to stream messages to subscribers
+- **WebSocket Bridge**: Spring GraphQL WebSocket support for subscriptions
+
+For detailed configuration options and advanced usage, see the `socket-stream` directory documentation.
 
 ---
 
@@ -217,14 +291,8 @@ data: {"id":"2","name":"User 2"}
    - Configuration is fetched before the application context is fully loaded
 
 2. **Configuration Import:**
-   ```yaml
-   # application.yaml in each service
-   spring:
-     application:
-       name: <service-name>
-     config:
-       import: configserver:http://localhost:8001
-   ```
+   - Each service declares its application name and imports config from Config Server
+   - Configuration location: `spring.config.import: configserver:http://localhost:8001`
 
 3. **Config File Naming Convention:**
    - Config Server looks for files: `{application-name}.yaml`
@@ -242,21 +310,15 @@ data: {"id":"2","name":"User 2"}
 | Gateway | `gateway.yaml` | 9000 | Route definitions, Eureka registration |
 | MVC Service | `mvc-service.yaml` | 9001 | Context path, Eureka registration |
 | Flux Service | `flux-service.yaml` | 9002 | WebFlux base path, Eureka registration |
+| Socket Stream | `socket-stream.yaml` | 7000 | Kafka integration, GraphQL, WebSocket, Eureka registration |
 
-### Eureka Configuration in Each Service
+### Common Properties (Inherited by All Services)
 
-All services register with Eureka for service discovery:
-
-```yaml
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8000/eureka/
-  instance:
-    hostname: localhost
-    lease-renewal-interval-in-seconds: 5          # Heartbeat interval
-    lease-expiration-duration-in-seconds: 10      # Cleanup timeout
-```
+All services inherit common properties from `config/application.yaml`:
+- **Eureka Server URL:** http://localhost:8000/eureka/
+- **Service Hostname:** localhost
+- **Health Check Intervals:** Heartbeat every 5 seconds, cleanup after 10 seconds
+- **Actuator Endpoints:** Health, info, and metrics endpoints enabled
 
 ---
 
@@ -267,8 +329,23 @@ eureka:
 - Java 25+
 - Maven 3.6+
 - Git
+- Docker and Docker Compose (for Socket Stream and Kafka)
 
 ### Starting the Services
+
+**Step 0: Start Kafka (for Socket Stream service)**
+
+Before starting services, start Kafka and Kafka UI using Docker Compose from the socket-stream directory:
+
+```bash
+cd socket-stream
+docker-compose up -d
+cd ..
+```
+
+Wait for containers to start (check with `docker-compose ps` in socket-stream directory).
+
+**Step 1-6: Start Spring Cloud Services**
 
 Start services in this order:
 
@@ -289,7 +366,11 @@ mvn spring-boot:run
 cd flux-service
 mvn spring-boot:run
 
-# 5. Start API Gateway
+# 5. Start Socket Stream Service (requires Kafka running)
+cd socket-stream
+mvn spring-boot:run
+
+# 6. Start API Gateway
 cd gateway
 mvn spring-boot:run
 ```
@@ -338,11 +419,36 @@ curl -N http://localhost:9000/flux-service/users
 # Will stream 10 users, one every second
 ```
 
-### 5. Verify Config Server
+### 5. Test Socket Stream Service (GraphQL)
+
+**Access GraphiQL UI:**
+```
+http://localhost:7000/graphiql
+```
+
+**Testing Mutations and Subscriptions:**
+
+Open two browser windows with GraphiQL:
+
+**Window A - Send Mutation:**
+- Navigate to http://localhost:7000/graphiql
+- Paste the sendMessage mutation
+- Click Play to execute
+
+**Window B - Subscribe to Messages:**
+- Navigate to http://localhost:7000/graphiql in a different window
+- Paste the messageStream subscription
+- Click Play to start listening for messages
+- Keep this window open
+
+Then send mutations from Window A and watch messages appear in real-time in Window B.
+
+### 6. Verify Config Server
 ```bash
 curl http://localhost:8001/gateway/default
 curl http://localhost:8001/mvc-service/default
 curl http://localhost:8001/flux-service/default
+curl http://localhost:8001/socket-stream/default
 ```
 
 ---
@@ -384,6 +490,14 @@ curl http://localhost:8001/flux-service/default
 - `spring-cloud-starter-netflix-eureka-client`
 - `org.projectlombok:lombok:1.18.42`
 
+**Socket Stream Service:**
+- `spring-boot-starter-graphql`
+- `spring-kafka`
+- `io.projectreactor.kafka:reactor-kafka`
+- `spring-cloud-starter-config`
+- `spring-cloud-starter-netflix-eureka-client`
+- `org.projectlombok:lombok:1.18.42`
+
 ---
 
 ## Troubleshooting
@@ -409,6 +523,29 @@ curl http://localhost:8001/flux-service/default
 - Check that `curl -N` flag is used (disables buffering)
 - Verify reactor dependencies are correct
 
+### Socket Stream Service Issues
+
+**Kafka Connection Refused:**
+- Ensure Kafka is running: `cd socket-stream && docker-compose ps`
+- Check Kafka port 7007 is accessible: `nc -zv localhost 7007`
+- Restart Kafka: `docker-compose down && docker-compose up -d`
+
+**GraphiQL Not Accessible:**
+- Verify Socket Stream service is running on port 7000
+- Check `spring.graphql.graphiql.enabled: true` in socket-stream.yaml
+- Clear browser cache and refresh page
+
+**Subscription Not Receiving Messages:**
+- Ensure mutation was sent before subscribing
+- Verify Kafka broker is running and healthy
+- Check WebSocket connection in browser DevTools (Network tab)
+- Make sure subscription is executed before sending mutations
+
+**Messages Not Appearing in Real-time:**
+- Confirm both windows have active connections (check browser console)
+- Verify Kafka topic exists: Access Kafka UI at http://localhost:8080
+- Check consumer group offset: `docker-compose exec -it kafka kafka-consumer-groups --bootstrap-server localhost:7007 --list`
+
 ---
 
 ## Project Technologies
@@ -417,11 +554,15 @@ curl http://localhost:8001/flux-service/default
 - **Spring Cloud:** 2025.1.1
 - **Java:** 25
 - **Maven:** Multi-module build
+- **GraphQL:** Spring GraphQL with WebSocket subscriptions
+- **Message Broker:** Apache Kafka with Docker Compose
 - **Microservices Patterns:**
   - Service Discovery (Eureka)
   - Configuration Management (Config Server)
   - API Gateway (Spring Cloud Gateway)
   - Reactive Programming (Project Reactor)
+  - Real-time Streaming (GraphQL Subscriptions)
+  - Event-driven Architecture (Kafka)
 
 ---
 
@@ -432,6 +573,9 @@ curl http://localhost:8001/flux-service/default
 3. **API Gateway Pattern:** Single entry point for all client requests with intelligent routing
 4. **Reactive vs Traditional:** Compare MVC and WebFlux approaches side-by-side
 5. **Spring Cloud Integration:** Seamless integration between different Spring Cloud components
+6. **Real-time Streaming:** GraphQL subscriptions with WebSocket for live data updates
+7. **Event-driven Architecture:** Kafka enables asynchronous, decoupled communication between services
+8. **Container Orchestration:** Docker Compose simplifies running dependent services like Kafka
 
 ---
 
