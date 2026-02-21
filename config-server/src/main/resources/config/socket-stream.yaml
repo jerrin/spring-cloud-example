@@ -13,6 +13,12 @@ spring:
         spring.json.trusted.packages: "*"
 
   graphql:
+    cors:
+      allowed-origins:
+        - "http://localhost:3000"
+      allowed-methods: GET,POST,OPTIONS
+      allowed-headers: "*"
+      allow-credentials: true
     graphiql:
       enabled: true
     websocket:

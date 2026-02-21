@@ -22,8 +22,7 @@ public class MessageSubscriptionController {
     @SubscriptionMapping
     public Flux<MessageEvent> messageStream() {
         return messagePublisher.getMessages()
-                .doOnNext(event -> logger.info("Emitting event: " + event))
-                .delayElements(Duration.ofSeconds(1));
+                .doOnNext(event -> logger.info("Emitting event: " + event));
     }
 
     @SubscriptionMapping

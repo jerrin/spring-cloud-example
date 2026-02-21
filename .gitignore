@@ -37,3 +37,6 @@ build/
 **/target/**
 mvnw
 mvnw.cmd
+/front-end/src/__generated__/
+/front-end/.next/
+/front-end/node_modules/

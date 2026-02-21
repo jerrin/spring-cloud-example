@@ -8,6 +8,8 @@ input SendMessageInput {
 
 type Query {
     message: Message!
+    messages: [Message!]!
+    allMessages: [Message!]!
 }
 
 type Mutation {

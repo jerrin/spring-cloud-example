@@ -8,7 +8,6 @@ import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Flux;
 
 import java.util.UUID;
-import java.util.logging.Logger;
 
 @Controller
 public class MessageMutationController {
@@ -23,14 +22,14 @@ public class MessageMutationController {
     public MessageEvent sendMessage(@Argument SendMessageInput input) {
         var message = input.content();
 
-        Flux.range(1, 20)
+        Flux.range(1, 15)
                 .delayElements(java.time.Duration.ofMillis(500))
                 .map(i -> createMessageEvent(i, message))
                 .doOnNext(producerService::sendMessage)
                 .subscribe();
 
         return new MessageEvent(
-                "",
+                UUID.randomUUID().toString(),
                 message
         );
     }
