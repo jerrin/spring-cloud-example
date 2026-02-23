@@ -2,8 +2,10 @@ package net.jerrin.demo.socketstream.config;
 
 
 import net.jerrin.demo.socketstream.bridge.MessagePublisher;
-import net.jerrin.demo.socketstream.model.MessageEvent;
-import org.apache.kafka.clients.admin.NewTopic;
+import net.jerrin.demo.socketstream.model.KafkaRecord;
+import net.jerrin.demo.socketstream.model.MessageRecord;
+import net.jerrin.demo.socketstream.model.StockPrice;
+import net.jerrin.demo.socketstream.service.ReactiveKafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,19 +24,48 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
-    @Value("${kafka.stream.consumer.reactive-group-id}")
-    private String groupId;
+    @Value("${kafka.topic.message.name}")
+    private String messageTopic;
 
-    @Value("${kafka.stream.topic.name}")
-    private String topicName;
+    @Value("${kafka.consumer.message.reactive-group-id}")
+    private String reactiveGroupId;
+
+    @Value("${kafka.topic.stock-price.name}")
+    private String stockPriceTopic;
+
+    @Value("${kafka.consumer.stock-price.reactive-group-id}")
+    private String stockPriceReactiveGroupId;
 
     @Bean
-    public NewTopic streamTopic() {
-        return new NewTopic(topicName, 1, (short) 1);
+    public MessagePublisher<MessageRecord> messagePublisher() {
+        return new MessagePublisher<>();
     }
 
     @Bean
-    public KafkaReceiver<String, MessageEvent> kafkaReceiver() {
+    public MessagePublisher<MessageRecord> reactiveMessagePublisher() {
+        return new MessagePublisher<>();
+    }
+
+    @Bean
+    public ReactiveKafkaConsumer<MessageRecord> reactiveKafkaConsumer(
+            MessagePublisher<MessageRecord> reactiveMessagePublisher) {
+        KafkaReceiver<String, MessageRecord> reactiveKafkaReceiver = setupReceiver(messageTopic, reactiveGroupId);
+        return new ReactiveKafkaConsumer<>(reactiveKafkaReceiver, reactiveMessagePublisher, 1000);
+    }
+
+    @Bean
+    public MessagePublisher<StockPrice> stockPriceMessagePublisher() {
+        return new MessagePublisher<>();
+    }
+
+    @Bean
+    public ReactiveKafkaConsumer<StockPrice> stockPriceKafkaConsumer(
+            MessagePublisher<StockPrice> stockPriceMessagePublisher) {
+        KafkaReceiver<String, StockPrice> stockPriceKafkaReceiver = setupReceiver(stockPriceTopic, stockPriceReactiveGroupId);
+        return new ReactiveKafkaConsumer<>(stockPriceKafkaReceiver, stockPriceMessagePublisher, 100);
+    }
+
+    private <T extends KafkaRecord> KafkaReceiver<String, T> setupReceiver(String topic, String groupId) {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
@@ -43,17 +74,11 @@ public class KafkaConfig {
         props.put("spring.json.trusted.packages", "*");
         props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 10);
 
-        ReceiverOptions<String, MessageEvent> receiverOptions =
-                ReceiverOptions.<String, MessageEvent>create(props)
-                        .subscription(Collections.singleton(topicName));
+        ReceiverOptions<String, T> receiverOptions =
+                ReceiverOptions.<String, T>create(props)
+                        .subscription(Collections.singleton(topic));
 
         return KafkaReceiver.create(receiverOptions);
     }
-
-    @Bean
-    public MessagePublisher reactiveMessagePublisher() {
-        return new MessagePublisher();
-    }
-
 
 }

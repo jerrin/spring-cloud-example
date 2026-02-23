@@ -2,6 +2,13 @@ type Message {
     id: ID
     content: String
 }
+
+type StockPrice {
+    ticker: String
+    date: String
+    price: Float
+}
+
 input SendMessageInput {
     content: String!
 }
@@ -14,9 +21,11 @@ type Query {
 
 type Mutation {
     sendMessage(input: SendMessageInput!): Message
+    publishPrices: Boolean
 }
 
 type Subscription {
     messageStream: Message
     messageReactiveStream: Message
+    stockPriceReactiveStream: StockPrice
 }

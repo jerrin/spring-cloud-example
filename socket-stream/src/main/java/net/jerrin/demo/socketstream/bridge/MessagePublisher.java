@@ -1,30 +1,27 @@
 package net.jerrin.demo.socketstream.bridge;
 
-import net.jerrin.demo.socketstream.model.MessageEvent;
-import org.springframework.stereotype.Component;
+import net.jerrin.demo.socketstream.model.KafkaRecord;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.util.concurrent.Queues;
 
-import java.time.Duration;
 import java.util.logging.Logger;
 
-@Component
-public class MessagePublisher {
+public class MessagePublisher<T extends KafkaRecord> {
 
     private final Logger logger = Logger.getLogger(MessagePublisher.class.getName());
 
-    private final Sinks.Many<MessageEvent> sink =
+    private final Sinks.Many<T> sink =
             Sinks.many().multicast().onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 
-    public void publish(MessageEvent event) {
-        sink.tryEmitNext(event);
+    public void publish(T kafkaRecord) {
+        sink.tryEmitNext(kafkaRecord);
     }
 
-    public Flux<MessageEvent> getMessages() {
+    public Flux<T> getRecords() {
         return sink.asFlux()
                 .onBackpressureBuffer(500, dropped ->
-                        logger.info("Dropped message: " + dropped))
+                        logger.info("Dropped record: " + dropped))
                 .limitRate(5);
     }
 }

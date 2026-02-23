@@ -28,9 +28,14 @@ server:
   port: 7000
 
 kafka:
-  stream:
-    topic:
-      name: stream-topic
-    consumer:
-      group-id: stream-group
-      reactive-group-id: reactive-stream-group
+  topic:
+    message:
+      name: message-topic
+    stock-price:
+      name: stock-price-topic
+  consumer:
+    message:
+      group-id: message-consumer-group
+      reactive-group-id: message-reactive-consumer-group
+    stock-price:
+      reactive-group-id: stock-price-reactive-consumer-group
