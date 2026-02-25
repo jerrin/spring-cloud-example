@@ -1,11 +1,11 @@
-import { Hello } from '@/src/components/Hello';
+import { HeaderWithName } from '@/src/components/Header';
 import { ChatStream, ChatReactiveStream, ChatPublisher } from '@/src/components/Chat';
 import { Suspense } from 'react';
 import { Col, Row } from 'antd';
 
-const Home = () => (
+const Chat = () => (
   <>
-    <Hello />
+    <HeaderWithName />
     <ChatPublisher />
     <Suspense fallback={<p>Loading chat...</p>}>
       <Row gutter={32}>
@@ -20,4 +20,4 @@ const Home = () => (
   </>
 );
 
-export default Home;
+export default Chat;
