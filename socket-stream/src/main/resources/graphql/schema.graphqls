@@ -9,14 +9,38 @@ type StockPrice {
     price: Float
 }
 
+type Comment {
+    id: ID
+    postId: ID
+    name: String
+    email: String
+    body: String
+}
+
+type Post {
+    id: ID
+    userId: ID
+    title: String
+    body: String
+    comments: [Comment!]!
+}
+
+type User {
+    id: ID
+    name: String
+    username: String
+    email: String
+    posts: [Post!]!
+}
+
 input SendMessageInput {
     content: String!
 }
-
 type Query {
     message: Message!
     messages: [Message!]!
     allMessages: [Message!]!
+    user(id: ID!): User
 }
 
 type Mutation {
